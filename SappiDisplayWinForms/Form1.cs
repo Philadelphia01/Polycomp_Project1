@@ -88,14 +88,13 @@ public partial class Form1 : Form
         var root = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
-            Padding = new Padding(18),
+            Padding = new Padding(12),
             BackColor = Color.FromArgb(10, 50, 110),
             ColumnCount = 1,
-            RowCount = 3,
+            RowCount = 2,
         };
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 120));
         Controls.Add(root);
 
         var title = new Label
@@ -110,19 +109,33 @@ public partial class Form1 : Form
         };
         root.Controls.Add(title, 0, 0);
 
-        var content = new Panel { Dock = DockStyle.Fill, BackColor = Color.Transparent };
-        root.Controls.Add(content, 0, 1);
+        var split = new SplitContainer
+        {
+            Dock = DockStyle.Fill,
+            Orientation = Orientation.Horizontal,
+            BackColor = Color.FromArgb(10, 50, 110),
+            BorderStyle = BorderStyle.None,
+            FixedPanel = FixedPanel.None,
+            IsSplitterFixed = false,
+            SplitterWidth = 8,
+            Panel1MinSize = 220,
+            Panel2MinSize = 110,
+        };
+        root.Controls.Add(split, 0, 1);
 
-        var bottom = new Panel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(5, 30, 70), Padding = new Padding(10) };
-        root.Controls.Add(bottom, 0, 2);
+        var content = new Panel { Dock = DockStyle.Fill, BackColor = Color.Transparent, AutoScroll = true };
+        split.Panel1.Controls.Add(content);
+
+        var bottom = new Panel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(5, 30, 70), Padding = new Padding(10), BorderStyle = BorderStyle.FixedSingle };
+        split.Panel2.Controls.Add(bottom);
 
         var hexLabel = new Label
         {
             Dock = DockStyle.Top,
-            Height = 24,
-            Text = "Combined output (hex)",
+            Height = 30,
+            Text = "Combined output (hex) - updates on every change",
             ForeColor = Color.FromArgb(220, 220, 220),
-            Font = new Font(Font.FontFamily, 10, FontStyle.Bold),
+            Font = new Font(Font.FontFamily, 11, FontStyle.Bold),
         };
         bottom.Controls.Add(hexLabel);
 
@@ -132,9 +145,11 @@ public partial class Form1 : Form
             Multiline = true,
             ReadOnly = true,
             ScrollBars = ScrollBars.Vertical,
+            BorderStyle = BorderStyle.FixedSingle,
             BackColor = Color.FromArgb(15, 15, 15),
             ForeColor = Color.FromArgb(220, 220, 220),
-            Font = new Font(Font.FontFamily, 10, FontStyle.Regular),
+            Font = new Font(Font.FontFamily, 11, FontStyle.Bold),
+            Text = "Waiting for input...",
         };
         bottom.Controls.Add(_hexOutput);
 
@@ -151,6 +166,9 @@ public partial class Form1 : Form
 
         outer.Controls.Add(BuildSectionPanel("PM1", BuildPmRows()), 0, 0);
         outer.Controls.Add(BuildSectionPanel("PM2", BuildPmRows()), 1, 0);
+
+        // Default split: keep output large and obvious, but user can drag.
+        split.SplitterDistance = Math.Max(300, Height - 320);
     }
 
     private Panel BuildSectionPanel(string sectionTitle, List<DisplayRow> rows)
@@ -178,7 +196,7 @@ public partial class Form1 : Form
             Dock = DockStyle.Fill,
             BackColor = Color.Transparent,
             ColumnCount = 5,
-            AutoSize = true,
+            AutoSize = false,
         };
         grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 42)); // label
         grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 23)); // target
