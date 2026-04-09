@@ -8,7 +8,7 @@ public partial class Form1 : Form
     private readonly List<LedInput> _ledInputs = new();
     private readonly List<RowBinding> _rows = new();
 
-    private TextBox? _hexOutput;
+    private RichTextBox? _hexOutput;
     private bool _sanitizing;
 
     public Form1()
@@ -18,6 +18,8 @@ public partial class Form1 : Form
         RecomputeAll();
     }
 
+    // Project requirement protocol: each LED field is prefixed by a byte marker for its user-selected colour.
+    // We keep these as ASCII "FA/FB/FC" tokens, then hex-encode the full ASCII stream for display.
     private enum LedColor
     {
         Red,
@@ -85,6 +87,7 @@ public partial class Form1 : Form
     {
         BackColor = Color.FromArgb(10, 50, 110);
 
+        // Layout choice: a SplitContainer makes the bottom output panel resizable during demos/recording.
         var root = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
@@ -139,17 +142,17 @@ public partial class Form1 : Form
         };
         bottom.Controls.Add(hexLabel);
 
-        _hexOutput = new TextBox
+        _hexOutput = new RichTextBox
         {
             Dock = DockStyle.Fill,
-            Multiline = true,
             ReadOnly = true,
-            ScrollBars = ScrollBars.Vertical,
             BorderStyle = BorderStyle.FixedSingle,
             BackColor = Color.FromArgb(15, 15, 15),
-            ForeColor = Color.FromArgb(220, 220, 220),
+            ForeColor = Color.FromArgb(110, 255, 110),
             Font = new Font(Font.FontFamily, 11, FontStyle.Bold),
-            Text = "Waiting for input...",
+            DetectUrls = false,
+            WordWrap = true,
+            Text = "HEX: (waiting for input...)",
         };
         bottom.Controls.Add(_hexOutput);
 
@@ -198,11 +201,11 @@ public partial class Form1 : Form
             ColumnCount = 5,
             AutoSize = false,
         };
-        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 42)); // label
-        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 23)); // target
-        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 23)); // actual
-        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 8)); // unit
-        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 40)); // light
+        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 38)); // label
+        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 24)); // target
+        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 24)); // actual
+        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 56)); // unit
+        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 28)); // light
 
         var colHeader = new TableLayoutPanel
         {
@@ -211,11 +214,11 @@ public partial class Form1 : Form
             BackColor = Color.Transparent,
             ColumnCount = 5,
         };
-        colHeader.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 42));
-        colHeader.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 23));
-        colHeader.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 23));
-        colHeader.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 8));
-        colHeader.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 40));
+        colHeader.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 38));
+        colHeader.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 24));
+        colHeader.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 24));
+        colHeader.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 56));
+        colHeader.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 28));
 
         colHeader.Controls.Add(MakeHeaderCell(""), 0, 0);
         colHeader.Controls.Add(MakeHeaderCell("TARGET"), 1, 0);
@@ -299,7 +302,7 @@ public partial class Form1 : Form
             new DisplayRow("TONS TO MAKE BUDGET", "TONS", true, true, true, NumericMode.Integer, NumericMode.Integer),
             new DisplayRow("SAFETY", "", false, false, false, NumericMode.Integer, NumericMode.Integer),
             new DisplayRow("INJURY FREE DAYS", "DAYS", false, true, false, NumericMode.Integer, NumericMode.Integer),
-            new DisplayRow("EFFLUENT", "M³/DAY", true, true, true, NumericMode.Decimal2, NumericMode.Decimal2),
+            new DisplayRow("EFFLUENT", "M/DAY", true, true, true, NumericMode.Decimal2, NumericMode.Decimal2),
         };
 
     private LedInput MakeLedInput(NumericMode mode)
@@ -318,6 +321,8 @@ public partial class Form1 : Form
         tb.KeyPress += (_, e) => EnforceNumericKeystroke(mode, tb, e);
         tb.TextChanged += (_, _) =>
         {
+            // We validate both typing (KeyPress) and paste/edit scenarios (TextChanged sanitation).
+            // This keeps input always conforming to: integer OR decimal with max 2 digits after '.'.
             SanitizeNumericText(tb, mode);
             RecomputeAll();
         };
@@ -466,7 +471,9 @@ public partial class Form1 : Form
             UpdateStatusLight(rb.Light, target, actual);
         }
 
-        // 2) Build combined stream left-to-right, top-to-bottom from ALL LED inputs
+        // 2) Build combined stream in the required physical order:
+        // left-to-right within a row, then top-to-bottom across the whole screen.
+        // (The list is built in control creation order, so iterating _ledInputs preserves that order.)
         var combined = new StringBuilder();
         foreach (var led in _ledInputs)
         {
@@ -477,7 +484,7 @@ public partial class Form1 : Form
         var bytes = Encoding.ASCII.GetBytes(combined.ToString());
         var hex = BitConverter.ToString(bytes).Replace("-", " ");
         if (_hexOutput is not null)
-            _hexOutput.Text = hex;
+            _hexOutput.Text = string.IsNullOrWhiteSpace(hex) ? "HEX: (no input yet)" : $"HEX: {hex}";
     }
 
     private static string ColorPrefix(LedColor color) =>
@@ -520,6 +527,10 @@ public partial class Form1 : Form
         var yellow = Color.FromArgb(255, 235, 90);
         var red = Color.FromArgb(255, 90, 90);
 
+        // Threshold rule from requirements:
+        // - Green when actual > target
+        // - Yellow when target > actual > 0.8*target
+        // - Red when actual < 0.8*target
         if (actual > target)
             light.FillColor = green;
         else if (actual > (0.8m * target))
