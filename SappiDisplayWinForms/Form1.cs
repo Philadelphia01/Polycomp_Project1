@@ -8,7 +8,7 @@ public partial class Form1 : Form
     private readonly List<LedInput> _ledInputs = new();
     private readonly List<RowBinding> _rows = new();
 
-    private RichTextBox? _hexOutput;
+    private TextBox? _hexOutput;
     private bool _sanitizing;
 
     public Form1()
@@ -122,7 +122,8 @@ public partial class Form1 : Form
             IsSplitterFixed = false,
             SplitterWidth = 8,
             Panel1MinSize = 220,
-            Panel2MinSize = 110,
+            // Set safely after layout; assigning early can throw on some machines/scales.
+            Panel2MinSize = 0,
         };
         root.Controls.Add(split, 0, 1);
 
@@ -142,15 +143,16 @@ public partial class Form1 : Form
         };
         bottom.Controls.Add(hexLabel);
 
-        _hexOutput = new RichTextBox
+        _hexOutput = new TextBox
         {
             Dock = DockStyle.Fill,
+            Multiline = true,
             ReadOnly = true,
+            ScrollBars = ScrollBars.Vertical,
             BorderStyle = BorderStyle.FixedSingle,
-            BackColor = Color.FromArgb(15, 15, 15),
-            ForeColor = Color.FromArgb(110, 255, 110),
-            Font = new Font(Font.FontFamily, 11, FontStyle.Bold),
-            DetectUrls = false,
+            BackColor = Color.Black,
+            ForeColor = Color.Lime,
+            Font = new Font("Consolas", 12, FontStyle.Bold),
             WordWrap = true,
             Text = "HEX: (waiting for input...)",
         };
@@ -170,8 +172,21 @@ public partial class Form1 : Form
         outer.Controls.Add(BuildSectionPanel("PM1", BuildPmRows()), 0, 0);
         outer.Controls.Add(BuildSectionPanel("PM2", BuildPmRows()), 1, 0);
 
-        // Default split: keep output large and obvious, but user can drag.
-        split.SplitterDistance = Math.Max(300, Height - 320);
+        // Set default split after first layout pass so bounds are valid.
+        Shown += (_, _) =>
+        {
+            const int desiredBottomMin = 170;
+            int safeBottomMin = Math.Max(0, split.Height - split.Panel1MinSize);
+            split.Panel2MinSize = Math.Min(desiredBottomMin, safeBottomMin);
+
+            int minTop = split.Panel1MinSize;
+            int maxTop = split.Height - split.Panel2MinSize;
+            if (maxTop <= minTop)
+                return;
+
+            int preferredTop = split.Height - 280;
+            split.SplitterDistance = Math.Max(minTop, Math.Min(preferredTop, maxTop));
+        };
     }
 
     private Panel BuildSectionPanel(string sectionTitle, List<DisplayRow> rows)
@@ -484,7 +499,12 @@ public partial class Form1 : Form
         var bytes = Encoding.ASCII.GetBytes(combined.ToString());
         var hex = BitConverter.ToString(bytes).Replace("-", " ");
         if (_hexOutput is not null)
+        {
             _hexOutput.Text = string.IsNullOrWhiteSpace(hex) ? "HEX: (no input yet)" : $"HEX: {hex}";
+            // Keep viewport at the start so "HEX: ..." is always visible.
+            _hexOutput.SelectionStart = 0;
+            _hexOutput.SelectionLength = 0;
+        }
     }
 
     private static string ColorPrefix(LedColor color) =>
